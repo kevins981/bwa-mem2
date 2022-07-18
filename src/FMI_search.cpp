@@ -397,11 +397,16 @@ void FMI_search::load_index()
     //beCalls = 0;
     char cp_file_name[PATH_MAX];
     strcpy_s(cp_file_name, PATH_MAX, ref_file_name);
+    // cp_file_name is broad.bwt.2bit.64A. This sounds like the BWT vector,
+    // i.e. last column of the BW matrix
     strcat_s(cp_file_name, PATH_MAX, CP_FILENAME_SUFFIX);
 
     // Read the BWT and FM index of the reference sequence
+    // I am not sure what the above comment means. The BWT is a part of the FM index.
     FILE *cpstream = NULL;
     cpstream = fopen(cp_file_name,"rb");
+    fprintf(stderr, "Opening cp file: %s\n", cp_file_name);
+
     if (cpstream == NULL)
     {
         fprintf(stderr, "ERROR! Unable to open the file: %s\n", cp_file_name);
@@ -412,22 +417,36 @@ void FMI_search::load_index()
         fprintf(stderr, "* Index file found. Loading index from %s\n", cp_file_name);
     }
 
+    // fread(ptr, size, cnt, stream); read size*cnt into ptr
     err_fread_noeof(&reference_seq_len, sizeof(int64_t), 1, cpstream);
+    // This file contains the reference sequence length. 
     assert(reference_seq_len > 0);
     assert(reference_seq_len <= 0x7fffffffffL);
 
+    // For large, this is 6434693835, or 6.4G
     fprintf(stderr, "* Reference seq len for bi-index = %ld\n", reference_seq_len);
 
     // create checkpointed occ
+    // "checkpoint" in this context means precomputing the tally.
     int64_t cp_occ_size = (reference_seq_len >> CP_SHIFT) + 1;
+    // CP_SHIFT is 6, so shift right means divide by 2^6 = 64.
+    // The full OCC table should have the same size as the reference sequence.
+    // The divide by 64 may be because we are only keeping one row for every
+    // 64 rows of the full OCC table (in order to reduce memory usage).
     cp_occ = NULL;
 
+    // count is the data structure that describes the first column of the BW matrix
     err_fread_noeof(&count[0], sizeof(int64_t), 5, cpstream);
     if ((cp_occ = (CP_OCC *)_mm_malloc(cp_occ_size * sizeof(CP_OCC), 64)) == NULL) {
+        // cp_occ_size = 100542092 or 100M
+        // sizeof(CP_OCC) = 64. 
+        // _mm_malloc(size, 64) allocates 64-byte alighed memory 
+        // so malloc 6.4GB of memory
         fprintf(stderr, "ERROR! unable to allocated cp_occ memory\n");
         exit(EXIT_FAILURE);
     }
 
+    // read all of 6.4GB OCC table. Seems like this file contains the OCC
     err_fread_noeof(cp_occ, sizeof(CP_OCC), cp_occ_size, cpstream);
     int64_t ii = 0;
     for(ii = 0; ii < 5; ii++)// update read count structure
@@ -435,6 +454,7 @@ void FMI_search::load_index()
         count[ii] = count[ii] + 1;
     }
 
+    // compression is enabled by default
     #if SA_COMPRESSION
 
     int64_t reference_seq_len_ = (reference_seq_len >> SA_COMPX) + 1;
@@ -455,6 +475,7 @@ void FMI_search::load_index()
     sentinel_index = -1;
     #if SA_COMPRESSION
     err_fread_noeof(&sentinel_index, sizeof(int64_t), 1, cpstream);
+    // not sure what this sentinel index is. Sentinel refers to the terminating $ character
     fprintf(stderr, "* sentinel-index: %ld\n", sentinel_index);
     #endif
     fclose(cpstream);
@@ -464,6 +485,7 @@ void FMI_search::load_index()
     for(x = 0; x < reference_seq_len; x++)
     {
         // fprintf(stderr, "x: %ld\n", x);
+        // what is happening here
         #if SA_COMPRESSION
         if(get_sa_entry_compressed(x) == 0) {
             sentinel_index = x;
@@ -485,9 +507,17 @@ void FMI_search::load_index()
         fprintf(stderr, "%ld,\t%lu\n", x, (unsigned long)count[x]);
     }
     fprintf(stderr, "\n");  
+    // count content:
+    // 0,	1
+    // 1,	1882204624
+    // 2,	3217346918
+    // 3,	4552489212
+    // 4,	6434693835
+    // 1234 probably represents ACGT (in a particular order). 
+    // So in the BW matrix, row 1 to row 1882204624 is probably one letter.
 
     fprintf(stderr, "* Reading other elements of the index from files %s\n",
-            ref_file_name);
+            ref_file_name); // /ssd1/kevin/genomics/input-datasets/fmi/broad
     bwa_idx_load_ele(ref_file_name, BWA_IDX_ALL);
 
     fprintf(stderr, "* Done reading Index!!\n");
