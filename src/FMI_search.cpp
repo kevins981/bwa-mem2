@@ -219,7 +219,8 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
     {
         if((i & CP_MASK) == 0)
         {
-            CP_OCC cpo;
+            // Only store Occ table rows that are multiples of the compression factor
+            CP_OCC cpo; // one Occ table row
             cpo.cp_count[0] = cp_count[0];
             cpo.cp_count[1] = cp_count[1];
             cpo.cp_count[2] = cp_count[2];
@@ -239,8 +240,29 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
                 cpo.one_hot_bwt_str[3] = cpo.one_hot_bwt_str[3] << 1;
 				uint8_t c = bwt[i + j];
                 //printf("c = %d\n", c);
-                if(c < 4)
-                {
+                if(c < 4) // 0, 1, 2, or 3, representing the four bases
+                { 
+                    // one hot bwt string representation. 
+                    // e.g. uncompressed Occ table
+                    // ----------
+                    // row | bwt
+                    // 0   |  A
+                    // 1   |  C
+                    // 2   |  C
+                    // 3   |  G
+                    // 4   |  A
+                    // 5   |  G
+                    // 6   |  T
+                    // 7   |  T
+                    // ----------
+                    // The corresponding compressed Occ table, compression factor = 4
+                    // -----------------------------------------
+                    // row | bwt substring | one_hot_bwt_str[A] | C  | G  | T 
+                    // 0   |  ACCG         |       1000         |0110|0001|0000
+                    // 1   |  AGTT         |       1000         |0000|0100|0011              
+                    // -------------------------------------
+                    // The one hot vectors encodes the positions of each base. 
+                    // Thus, for compression factor = 64, each one hot vector needs to be 64 bits long.
                     cpo.one_hot_bwt_str[c] += 1;
                 }
 			}
@@ -304,6 +326,7 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
 }
 
 int FMI_search::build_index() {
+    printf("CP_SHIFT = %d, CP_MASK = %d\n", CP_SHIFT, CP_MASK);
 
     char *prefix = file_name;
     uint64_t startTick;
@@ -383,6 +406,9 @@ int FMI_search::build_index() {
 
 void FMI_search::load_index()
 {
+    // This one_hot_mask_array has COMPRESSION_FACTOR numeber of elements, each element of size COMPRESSION_FACTOR.
+    // Thus, this original one_hot_mask_array is specifically designed for compression x64. 
+    // It is used to mask one_hot_bwt_str vectors. See FMI_search.h for more details.
     one_hot_mask_array = (uint64_t *)_mm_malloc(64 * sizeof(uint64_t), 64);
     one_hot_mask_array[0] = 0;
     uint64_t base = 0x8000000000000000L;

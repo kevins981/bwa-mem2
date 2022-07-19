@@ -48,10 +48,25 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 #define assert_not_null(x, size, cur_alloc) \
         if (x == NULL) { fprintf(stderr, "Allocation of %0.2lf GB for " #x " failed.\nCurrent Allocation = %0.2lf GB\n", size * 1.0 /(1024*1024*1024), cur_alloc * 1.0 /(1024*1024*1024)); exit(EXIT_FAILURE); }
 
-#define CP_BLOCK_SIZE 64
-#define CP_FILENAME_SUFFIX ".bwt.2bit.64"
-#define CP_MASK 63
-#define CP_SHIFT 6
+#define CP_BLOCK_SIZE 8
+#define CP_FILENAME_SUFFIX ".bwt.2bit.8"
+#define CP_MASK 7
+#define CP_SHIFT 3
+
+//#define CP_BLOCK_SIZE 16
+//#define CP_FILENAME_SUFFIX ".bwt.2bit.16"
+//#define CP_MASK 15
+//#define CP_SHIFT 4
+
+//#define CP_BLOCK_SIZE 32
+//#define CP_FILENAME_SUFFIX ".bwt.2bit.32"
+//#define CP_MASK 31
+//#define CP_SHIFT 5
+
+//#define CP_BLOCK_SIZE 64
+//#define CP_FILENAME_SUFFIX ".bwt.2bit.64"
+//#define CP_MASK 63
+//#define CP_SHIFT 6
 
 typedef struct checkpoint_occ_scalar
 {
@@ -64,6 +79,44 @@ static inline int _mm_countbits_64(unsigned long x) {
     return __builtin_popcountl(x);
 }
 #endif
+
+// GET_OCC:
+// pp is the occ table row that we wish to retrieve, c is the base.
+// occ_id_pp, y_pp, one_hot_bwt_str_c_pp, and match_mask_pp, are temporary variables used only in GET_OCC, 
+// occ_pp is the "return" value of this macro, i.e. the occurance value retrieved from the occ table.
+//
+// Example: pp = 1 = 0b001, compression ration = 4, CP_SHIFT = 2, CP_MASK = 3 = 0b11
+// This means that every 4th entry is stored in the occ table: 0th, 4th, 8th, 12th rows etc.
+
+// e.g. uncompressed Occ table
+// ----------------------
+// row | bwt | count[C] |
+// 0   |  A  | 22       |
+// 1   |  C  | 23       |
+// 2   |  C  | 24       |
+// 3   |  G  | 24       |
+// 4   |  A  | 24       |
+// 5   |  G  | 24       |
+// 6   |  T  | 24       |
+// 7   |  T  | 24       |
+// ----------------------
+// The corresponding compressed Occ table, compression factor = 4
+// --------------------------------------------------------------------
+// row | count[C] | bwt substring | one_hot_bwt_str[A] | C  | G  | T  |
+// 0   |   22     |  ACCG         |       1000         |0110|0001|0000|
+// 1   |   24     |  AGTT         |       1000         |0000|0100|0011|             
+// --------------------------------------------------------------------
+
+// occ_id_pp = 0b0 = 0, ypp = 0b10 = 1
+// occ_pp = cp_occ[1].cp_count = the 0th row of uncompressed table 
+// Since we are looking for row 1, need to used count[C] at 0th row to compute count[C] at row 1
+// one_hot_bwt_str_c_pp = cp_occ[0].one_hot_bwt_str[C] = 0110
+// See FM_index.cpp one_hot_bwt_str construction to see how one_hot_bwt_str works. Also see BWA-MEM2 paper section IV.A
+// match_mask_pp = 0110 & one_hot_mask_array[1]
+// This mask is used to only count the number of Cs up to row 1. Thus, one_hot_mask_array should be 1100.
+// match_mask_pp = 0100
+// _mm_countbits_ counts the number of 1 bits in match_mask_pp
+// occ_pp = 22 + 1 = 23 --> occ[C, 1] = 23
 
 #define \
 GET_OCC(pp, c, occ_id_pp, y_pp, occ_pp, one_hot_bwt_str_c_pp, match_mask_pp) \
