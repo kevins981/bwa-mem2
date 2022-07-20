@@ -48,10 +48,15 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 #define assert_not_null(x, size, cur_alloc) \
         if (x == NULL) { fprintf(stderr, "Allocation of %0.2lf GB for " #x " failed.\nCurrent Allocation = %0.2lf GB\n", size * 1.0 /(1024*1024*1024), cur_alloc * 1.0 /(1024*1024*1024)); exit(EXIT_FAILURE); }
 
-#define CP_BLOCK_SIZE 8
-#define CP_FILENAME_SUFFIX ".bwt.2bit.8"
-#define CP_MASK 7
-#define CP_SHIFT 3
+#define CP_BLOCK_SIZE 1
+#define CP_FILENAME_SUFFIX ".bwt.2bit.1"
+#define CP_MASK 0
+#define CP_SHIFT 0
+
+//#define CP_BLOCK_SIZE 8
+//#define CP_FILENAME_SUFFIX ".bwt.2bit.8"
+//#define CP_MASK 7
+//#define CP_SHIFT 3
 
 //#define CP_BLOCK_SIZE 16
 //#define CP_FILENAME_SUFFIX ".bwt.2bit.16"
