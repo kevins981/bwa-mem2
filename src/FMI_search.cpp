@@ -52,7 +52,6 @@ FMI_search::FMI_search(const char *fname)
     sa_ls_word = NULL;
     sa_ms_byte = NULL;
     cp_occ = NULL;
-    //one_hot_mask_array = NULL;
 }
 
 FMI_search::~FMI_search()
@@ -63,8 +62,6 @@ FMI_search::~FMI_search()
         _mm_free(sa_ls_word);
     if(cp_occ)
         _mm_free(cp_occ);
-    //if(one_hot_mask_array)
-    //    _mm_free(one_hot_mask_array);
 }
 
 int64_t FMI_search::pac_seq_len(const char *fn_pac)
@@ -218,67 +215,17 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
     // TODO: upper bound should be cp_occ_size, which is ref_seq_len+1
     for(i = 0; i < ref_seq_len; i++)
     {
-        // TODO: remove if checks for no compression
-        //if((i & CP_MASK) == 0) {
-            // Only store Occ table rows that are multiples of the compression factor
-            CP_OCC_UNCOMPRESSED cpo; // one Occ table row
-            cpo.cp_count[0] = cp_count[0];
-            cpo.cp_count[1] = cp_count[1];
-            cpo.cp_count[2] = cp_count[2];
-            cpo.cp_count[3] = cp_count[3];
+        // Only store Occ table rows that are multiples of the compression factor
+        CP_OCC_UNCOMPRESSED cpo; // one Occ table row
+        cpo.cp_count[0] = cp_count[0];
+        cpo.cp_count[1] = cp_count[1];
+        cpo.cp_count[2] = cp_count[2];
+        cpo.cp_count[3] = cp_count[3];
 
-            cpo.bwt_char = bwt[i];
+        cpo.bwt_char = bwt[i];
 
-			//int32_t j;
-            //cpo.one_hot_bwt_str[0] = 0;
-            //cpo.one_hot_bwt_str[1] = 0;
-            //cpo.one_hot_bwt_str[2] = 0;
-            //cpo.one_hot_bwt_str[3] = 0;
+        cp_occ[i >> CP_SHIFT] = cpo;
 
-            /*
-			for(j = 0; j < CP_BLOCK_SIZE; j++)
-			{
-                cpo.one_hot_bwt_str[0] = cpo.one_hot_bwt_str[0] << 1;
-                cpo.one_hot_bwt_str[1] = cpo.one_hot_bwt_str[1] << 1;
-                cpo.one_hot_bwt_str[2] = cpo.one_hot_bwt_str[2] << 1;
-                cpo.one_hot_bwt_str[3] = cpo.one_hot_bwt_str[3] << 1;
-				uint8_t c = bwt[i + j];
-                //printf("c = %d\n", c);
-                if(c < 4) // 0, 1, 2, or 3, representing the four bases
-                { 
-                    // one hot bwt string representation. 
-                    // e.g. uncompressed Occ table
-                    // ----------
-                    // row | bwt
-                    // 0   |  A
-                    // 1   |  C
-                    // 2   |  C
-                    // 3   |  G
-                    // 4   |  A
-                    // 5   |  G
-                    // 6   |  T
-                    // 7   |  T
-                    // ----------
-                    // The corresponding compressed Occ table, compression factor = 4
-                    // -----------------------------------------
-                    // row | bwt substring | one_hot_bwt_str[A] | C  | G  | T 
-                    // 0   |  ACCG         |       1000         |0110|0001|0000
-                    // 1   |  AGTT         |       1000         |0000|0100|0011              
-                    // -------------------------------------
-                    // The one hot vectors encodes the positions of each base. 
-                    // Thus, for compression factor = 64, each one hot vector needs to be 64 bits long.
-                    cpo.one_hot_bwt_str[c] += 1;
-                }
-			}
-            */
-
-            cp_occ[i >> CP_SHIFT] = cpo;
-            //if (i % 64 == 0){
-            //    printf("create OCC row = %ld, count[0] = %ld, count[1] = %ld, count[2] = %ld, count[3] = %ld\n", i >> 6, cp_occ[i >> CP_SHIFT].cp_count[0], cp_occ[i >> CP_SHIFT].cp_count[1], cp_occ[i >> CP_SHIFT].cp_count[2], cp_occ[i >> CP_SHIFT].cp_count[3]);
-            //}
-
-
-        //}
         cp_count[bwt[i]]++;
     }
     outstream.write((char*)cp_occ, cp_occ_size * sizeof(CP_OCC_UNCOMPRESSED));
@@ -419,19 +366,6 @@ int FMI_search::build_index() {
 
 void FMI_search::load_index()
 {
-    // This one_hot_mask_array has COMPRESSION_FACTOR numeber of elements, each element of size COMPRESSION_FACTOR.
-    // Thus, this original one_hot_mask_array is specifically designed for compression x64. 
-    // It is used to mask one_hot_bwt_str vectors. See FMI_search.h for more details.
-    //one_hot_mask_array = (uint64_t *)_mm_malloc(64 * sizeof(uint64_t), 64);
-    //one_hot_mask_array[0] = 0;
-    //uint64_t base = 0x8000000000000000L;
-    //one_hot_mask_array[1] = base;
-    //int64_t i = 0;
-    //for(i = 2; i < 64; i++)
-    //{
-    //    one_hot_mask_array[i] = (one_hot_mask_array[i - 1] >> 1) | base;
-    //}
-
     char *ref_file_name = file_name;
     //beCalls = 0;
     char cp_file_name[PATH_MAX];
@@ -1110,8 +1044,6 @@ SMEM FMI_search::backwardExt(SMEM smem, uint8_t a)
     {
         int64_t sp = (int64_t)(smem.k);
         int64_t ep = (int64_t)(smem.k) + (int64_t)(smem.s);
-        //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
-        //GET_OCC(ep, b, occ_id_ep, y_ep, occ_ep, one_hot_bwt_str_c_ep, match_mask_ep);
         GET_OCC_UNCOMPRESSED(sp, b, occ_id_sp, occ_sp);
         GET_OCC_UNCOMPRESSED(ep, b, occ_id_ep, occ_ep);
         //printf("GET OCC input: sp = %ld, b = %ld, ep = %ld; output: occ_sp = %ld, occ_ep = %ld \n", sp, b, ep, occ_sp, occ_ep);
@@ -1211,31 +1143,12 @@ int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
         {
             int64_t occ_id_pp_ = sp >> CP_SHIFT;
             int64_t y_pp_ = CP_BLOCK_SIZE - (sp & CP_MASK) - 1; 
-            //uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
             uint8_t bwt_char = cp_occ[occ_id_pp_].bwt_char;
-            //uint8_t b;
-
-            // Figuring out BWT[sp]
-            //if((one_hot_bwt_str[0] >> y_pp_) & 1)
-            //    b = 0;
-            //else if((one_hot_bwt_str[1] >> y_pp_) & 1)
-            //    b = 1;
-            //else if((one_hot_bwt_str[2] >> y_pp_) & 1)
-            //    b = 2;
-            //else if((one_hot_bwt_str[3] >> y_pp_) & 1)
-            //    b = 3;
-            //else
-            //    b = 4;
-
-            //if (b == 4) {
-            //    return offset;
-            //}
 
             if (bwt_char == 4) {
                 return offset;
             }
 
-            //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
             GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
             // Occ[sp, BWT[sp]] , or, the rank of BWT[sp]
 
@@ -1308,30 +1221,13 @@ int64_t FMI_search::call_one_step(int64_t pos, int64_t &sa_entry, int64_t &offse
         int64_t occ_id_pp_ = sp >> CP_SHIFT;
         int64_t y_pp_ = CP_BLOCK_SIZE - (sp & CP_MASK) - 1; 
         uint8_t bwt_char = cp_occ[occ_id_pp_].bwt_char;
-        //uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
         uint8_t b;
-
-        //if((one_hot_bwt_str[0] >> y_pp_) & 1)
-        //    b = 0;
-        //else if((one_hot_bwt_str[1] >> y_pp_) & 1)
-        //    b = 1;
-        //else if((one_hot_bwt_str[2] >> y_pp_) & 1)
-        //    b = 2;
-        //else if((one_hot_bwt_str[3] >> y_pp_) & 1)
-        //    b = 3;
-        //else
-        //    b = 4;
-        //if (b == 4) {
-        //    sa_entry = 0;
-        //    return 1;
-        //}
 
         if (bwt_char == 4) {
             sa_entry = 0;
             return 1;
         }
         
-        //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
         GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
         
         sp = count[b] + occ_sp;
