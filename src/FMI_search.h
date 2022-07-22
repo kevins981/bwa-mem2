@@ -73,17 +73,23 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 //#define CP_MASK 63
 //#define CP_SHIFT 6
 
-typedef struct checkpoint_occ_scalar
+//typedef struct checkpoint_occ_scalar
+//{
+//    int64_t cp_count[4];
+//    uint64_t one_hot_bwt_str[4];
+//}CP_OCC;
+
+typedef struct checkpoint_occ_scalar_uncompressed
 {
     int64_t cp_count[4];
-    uint64_t one_hot_bwt_str[4];
-}CP_OCC;
+    uint8_t bwt_char;
+}CP_OCC_UNCOMPRESSED;
 
-#if defined(__clang__) || defined(__GNUC__)
-static inline int _mm_countbits_64(unsigned long x) {
-    return __builtin_popcountl(x);
-}
-#endif
+//#if defined(__clang__) || defined(__GNUC__)
+//static inline int _mm_countbits_64(unsigned long x) {
+//    return __builtin_popcountl(x);
+//}
+//#endif
 
 // GET_OCC:
 // pp is the occ table row that we wish to retrieve, c is the base.
@@ -123,14 +129,26 @@ static inline int _mm_countbits_64(unsigned long x) {
 // _mm_countbits_ counts the number of 1 bits in match_mask_pp
 // occ_pp = 22 + 1 = 23 --> occ[C, 1] = 23
 
+
+//#define \
+//GET_OCC(pp, c, occ_id_pp, y_pp, occ_pp, one_hot_bwt_str_c_pp, match_mask_pp) \
+//                int64_t occ_id_pp = pp >> CP_SHIFT; \
+//                int64_t y_pp = pp & CP_MASK; \
+//                int64_t occ_pp = cp_occ[occ_id_pp].cp_count[c]; \
+//                uint64_t one_hot_bwt_str_c_pp = cp_occ[occ_id_pp].one_hot_bwt_str[c]; \
+//                uint64_t match_mask_pp = one_hot_bwt_str_c_pp & one_hot_mask_array[y_pp]; \
+//                occ_pp += _mm_countbits_64(match_mask_pp);
+
+// If no compression:
+// Just return cp_count of the requested row
+// No need to store one_hot_bwt_str[] for each row
+
+// TODO: dont need occ_id_pp anymore
 #define \
-GET_OCC(pp, c, occ_id_pp, y_pp, occ_pp, one_hot_bwt_str_c_pp, match_mask_pp) \
-                int64_t occ_id_pp = pp >> CP_SHIFT; \
-                int64_t y_pp = pp & CP_MASK; \
-                int64_t occ_pp = cp_occ[occ_id_pp].cp_count[c]; \
-                uint64_t one_hot_bwt_str_c_pp = cp_occ[occ_id_pp].one_hot_bwt_str[c]; \
-                uint64_t match_mask_pp = one_hot_bwt_str_c_pp & one_hot_mask_array[y_pp]; \
-                occ_pp += _mm_countbits_64(match_mask_pp);
+GET_OCC_UNCOMPRESSED(pp, c, occ_id_pp, occ_pp) \
+                int64_t occ_id_pp = pp; \
+                int64_t occ_pp = cp_occ[pp].cp_count[c];
+                
 
 typedef struct smem_struct
 {
@@ -232,9 +250,9 @@ private:
         int64_t count[5];
         uint32_t *sa_ls_word;
         int8_t *sa_ms_byte;
-        CP_OCC *cp_occ;
+        CP_OCC_UNCOMPRESSED *cp_occ;
 
-        uint64_t *one_hot_mask_array;
+        //uint64_t *one_hot_mask_array;
 
         int64_t pac_seq_len(const char *fn_pac);
         void pac2nt(const char *fn_pac,

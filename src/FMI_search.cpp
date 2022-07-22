@@ -52,7 +52,7 @@ FMI_search::FMI_search(const char *fname)
     sa_ls_word = NULL;
     sa_ms_byte = NULL;
     cp_occ = NULL;
-    one_hot_mask_array = NULL;
+    //one_hot_mask_array = NULL;
 }
 
 FMI_search::~FMI_search()
@@ -63,8 +63,8 @@ FMI_search::~FMI_search()
         _mm_free(sa_ls_word);
     if(cp_occ)
         _mm_free(cp_occ);
-    if(one_hot_mask_array)
-        _mm_free(one_hot_mask_array);
+    //if(one_hot_mask_array)
+    //    _mm_free(one_hot_mask_array);
 }
 
 int64_t FMI_search::pac_seq_len(const char *fn_pac)
@@ -202,36 +202,40 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
 
 
     printf("CP_SHIFT = %d, CP_MASK = %d\n", CP_SHIFT, CP_MASK);
-    printf("sizeof CP_OCC = %ld\n", sizeof(CP_OCC));
+    printf("sizeof CP_OCC_UNCOMPRESSED = %ld\n", sizeof(CP_OCC_UNCOMPRESSED));
     fflush(stdout);
     // create checkpointed occ
     int64_t cp_occ_size = (ref_seq_len >> CP_SHIFT) + 1;
-    CP_OCC *cp_occ = NULL;
+    CP_OCC_UNCOMPRESSED *cp_occ = NULL;
 
-    size = cp_occ_size * sizeof(CP_OCC);
-    cp_occ = (CP_OCC *)_mm_malloc(size, 64);
+    size = cp_occ_size * sizeof(CP_OCC_UNCOMPRESSED);
+    cp_occ = (CP_OCC_UNCOMPRESSED *)_mm_malloc(size, 64);
     assert_not_null(cp_occ, size, index_alloc);
-    memset(cp_occ, 0, cp_occ_size * sizeof(CP_OCC));
+    memset(cp_occ, 0, cp_occ_size * sizeof(CP_OCC_UNCOMPRESSED));
     int64_t cp_count[16];
 
     memset(cp_count, 0, 16 * sizeof(int64_t));
+    // TODO: upper bound should be cp_occ_size, which is ref_seq_len+1
     for(i = 0; i < ref_seq_len; i++)
     {
-        if((i & CP_MASK) == 0)
-        {
+        // TODO: remove if checks for no compression
+        //if((i & CP_MASK) == 0) {
             // Only store Occ table rows that are multiples of the compression factor
-            CP_OCC cpo; // one Occ table row
+            CP_OCC_UNCOMPRESSED cpo; // one Occ table row
             cpo.cp_count[0] = cp_count[0];
             cpo.cp_count[1] = cp_count[1];
             cpo.cp_count[2] = cp_count[2];
             cpo.cp_count[3] = cp_count[3];
 
-			int32_t j;
-            cpo.one_hot_bwt_str[0] = 0;
-            cpo.one_hot_bwt_str[1] = 0;
-            cpo.one_hot_bwt_str[2] = 0;
-            cpo.one_hot_bwt_str[3] = 0;
+            cpo.bwt_char = bwt[i];
 
+			//int32_t j;
+            //cpo.one_hot_bwt_str[0] = 0;
+            //cpo.one_hot_bwt_str[1] = 0;
+            //cpo.one_hot_bwt_str[2] = 0;
+            //cpo.one_hot_bwt_str[3] = 0;
+
+            /*
 			for(j = 0; j < CP_BLOCK_SIZE; j++)
 			{
                 cpo.one_hot_bwt_str[0] = cpo.one_hot_bwt_str[0] << 1;
@@ -266,12 +270,18 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
                     cpo.one_hot_bwt_str[c] += 1;
                 }
 			}
+            */
 
             cp_occ[i >> CP_SHIFT] = cpo;
-        }
+            //if (i % 64 == 0){
+            //    printf("create OCC row = %ld, count[0] = %ld, count[1] = %ld, count[2] = %ld, count[3] = %ld\n", i >> 6, cp_occ[i >> CP_SHIFT].cp_count[0], cp_occ[i >> CP_SHIFT].cp_count[1], cp_occ[i >> CP_SHIFT].cp_count[2], cp_occ[i >> CP_SHIFT].cp_count[3]);
+            //}
+
+
+        //}
         cp_count[bwt[i]]++;
     }
-    outstream.write((char*)cp_occ, cp_occ_size * sizeof(CP_OCC));
+    outstream.write((char*)cp_occ, cp_occ_size * sizeof(CP_OCC_UNCOMPRESSED));
     _mm_free(cp_occ);
     _mm_free(bwt);
 
@@ -284,12 +294,15 @@ int FMI_search::build_fm_index(const char *ref_file_name, char *binary_seq, int6
     int8_t *sa_ms_byte = (int8_t *)_mm_malloc(size, 64);
     assert_not_null(sa_ms_byte, size, index_alloc);
     int64_t pos = 0;
+    // Building compressed suffix array. The SA is the same length as the reference sequence
     for(i = 0; i < ref_seq_len; i++)
     {
         if ((i & SA_COMPX_MASK) == 0)
         {
-            sa_ls_word[pos] = sa_bwt[i] & 0xffffffff;
-            sa_ms_byte[pos] = (sa_bwt[i] >> 32) & 0xff;
+            // If SA index is a multiple of compression factor, store in memory. Else, do not store.
+            // This is the same compression scheme as the occ table. 
+            sa_ls_word[pos] = sa_bwt[i] & 0xffffffff; // lower 32 bits
+            sa_ms_byte[pos] = (sa_bwt[i] >> 32) & 0xff; // upper 8 bits
             pos++;
         }
     }
@@ -409,15 +422,15 @@ void FMI_search::load_index()
     // This one_hot_mask_array has COMPRESSION_FACTOR numeber of elements, each element of size COMPRESSION_FACTOR.
     // Thus, this original one_hot_mask_array is specifically designed for compression x64. 
     // It is used to mask one_hot_bwt_str vectors. See FMI_search.h for more details.
-    one_hot_mask_array = (uint64_t *)_mm_malloc(64 * sizeof(uint64_t), 64);
-    one_hot_mask_array[0] = 0;
-    uint64_t base = 0x8000000000000000L;
-    one_hot_mask_array[1] = base;
-    int64_t i = 0;
-    for(i = 2; i < 64; i++)
-    {
-        one_hot_mask_array[i] = (one_hot_mask_array[i - 1] >> 1) | base;
-    }
+    //one_hot_mask_array = (uint64_t *)_mm_malloc(64 * sizeof(uint64_t), 64);
+    //one_hot_mask_array[0] = 0;
+    //uint64_t base = 0x8000000000000000L;
+    //one_hot_mask_array[1] = base;
+    //int64_t i = 0;
+    //for(i = 2; i < 64; i++)
+    //{
+    //    one_hot_mask_array[i] = (one_hot_mask_array[i - 1] >> 1) | base;
+    //}
 
     char *ref_file_name = file_name;
     //beCalls = 0;
@@ -463,9 +476,10 @@ void FMI_search::load_index()
 
     // count is the data structure that describes the first column of the BW matrix
     err_fread_noeof(&count[0], sizeof(int64_t), 5, cpstream);
-    if ((cp_occ = (CP_OCC *)_mm_malloc(cp_occ_size * sizeof(CP_OCC), 64)) == NULL) {
+    if ((cp_occ = (CP_OCC_UNCOMPRESSED *)_mm_malloc(cp_occ_size * sizeof(CP_OCC_UNCOMPRESSED), 64)) == NULL) {
         // cp_occ_size = 100542092 or 100M
-        // sizeof(CP_OCC) = 64. 
+        // sizeof(CP_OCC) = 64. Wait how does that work. is this just a pointer?
+        // sizeof(CP_OCC_UNCOMPRESSED) = ?. 
         // _mm_malloc(size, 64) allocates 64-byte alighed memory 
         // so malloc 6.4GB of memory
         fprintf(stderr, "ERROR! unable to allocated cp_occ memory\n");
@@ -473,7 +487,15 @@ void FMI_search::load_index()
     }
 
     // read all of 6.4GB OCC table. Seems like this file contains the OCC
-    err_fread_noeof(cp_occ, sizeof(CP_OCC), cp_occ_size, cpstream);
+    err_fread_noeof(cp_occ, sizeof(CP_OCC_UNCOMPRESSED), cp_occ_size, cpstream);
+    // Workaround for uncompressed: the algorithm is access cp_occ[cp_occ_size-1], which we did not set
+    // Adding this last entry manually. Hardcoding for now.
+    // TODO: properly generate the last entry in cp_occ during build_index()
+    cp_occ[cp_occ_size-1].cp_count[0] = 1882204623;
+    cp_occ[cp_occ_size-1].cp_count[1] = 1335142294;
+    cp_occ[cp_occ_size-1].cp_count[2] = 1335142294;
+    cp_occ[cp_occ_size-1].cp_count[3] = 1882204623;
+
     int64_t ii = 0;
     for(ii = 0; ii < 5; ii++)// update read count structure
     {
@@ -512,7 +534,7 @@ void FMI_search::load_index()
     {
         // fprintf(stderr, "x: %ld\n", x);
         // what is happening here
-        #if SA_COMPRESSION
+        #if SA_COMPX_MASK
         if(get_sa_entry_compressed(x) == 0) {
             sentinel_index = x;
             break;
@@ -1088,8 +1110,11 @@ SMEM FMI_search::backwardExt(SMEM smem, uint8_t a)
     {
         int64_t sp = (int64_t)(smem.k);
         int64_t ep = (int64_t)(smem.k) + (int64_t)(smem.s);
-        GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
-        GET_OCC(ep, b, occ_id_ep, y_ep, occ_ep, one_hot_bwt_str_c_ep, match_mask_ep);
+        //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
+        //GET_OCC(ep, b, occ_id_ep, y_ep, occ_ep, one_hot_bwt_str_c_ep, match_mask_ep);
+        GET_OCC_UNCOMPRESSED(sp, b, occ_id_sp, occ_sp);
+        GET_OCC_UNCOMPRESSED(ep, b, occ_id_ep, occ_ep);
+        //printf("GET OCC input: sp = %ld, b = %ld, ep = %ld; output: occ_sp = %ld, occ_ep = %ld \n", sp, b, ep, occ_sp, occ_ep);
         k[b] = count[b] + occ_sp;
         s[b] = occ_ep - occ_sp;
     }
@@ -1158,10 +1183,10 @@ void FMI_search::get_sa_entries(SMEM *smemArray, int64_t *coordArray, int32_t *c
 // sa_compression
 int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
 {
-    if ((pos & SA_COMPX_MASK) == 0) {
-        
+    if ((pos & SA_COMPX_MASK) == 0) { 
+        // if pos is a multiple of compression factor, just retrieve the entry from memory
         #if  SA_COMPRESSION
-        int64_t sa_entry = sa_ms_byte[pos >> SA_COMPX];
+        int64_t sa_entry = sa_ms_byte[pos >> SA_COMPX];  // this looks like the most significant byte
         #else
         int64_t sa_entry = sa_ms_byte[pos];     // simulation
         #endif
@@ -1169,7 +1194,7 @@ int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
         sa_entry = sa_entry << 32;
         
         #if  SA_COMPRESSION
-        sa_entry = sa_entry + sa_ls_word[pos >> SA_COMPX];
+        sa_entry = sa_entry + sa_ls_word[pos >> SA_COMPX];  // least significant word (32 bit)
         #else
         sa_entry = sa_entry + sa_ls_word[pos];   // simulation
         #endif
@@ -1177,6 +1202,8 @@ int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
         return sa_entry;        
     }
     else {
+        // else, the SA entry is not stored on memory and must be computed
+
         // tprof[MEM_CHAIN][tid] ++;
         int64_t offset = 0; 
         int64_t sp = pos;
@@ -1184,30 +1211,40 @@ int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
         {
             int64_t occ_id_pp_ = sp >> CP_SHIFT;
             int64_t y_pp_ = CP_BLOCK_SIZE - (sp & CP_MASK) - 1; 
-            uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
-            uint8_t b;
+            //uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
+            uint8_t bwt_char = cp_occ[occ_id_pp_].bwt_char;
+            //uint8_t b;
 
-            if((one_hot_bwt_str[0] >> y_pp_) & 1)
-                b = 0;
-            else if((one_hot_bwt_str[1] >> y_pp_) & 1)
-                b = 1;
-            else if((one_hot_bwt_str[2] >> y_pp_) & 1)
-                b = 2;
-            else if((one_hot_bwt_str[3] >> y_pp_) & 1)
-                b = 3;
-            else
-                b = 4;
+            // Figuring out BWT[sp]
+            //if((one_hot_bwt_str[0] >> y_pp_) & 1)
+            //    b = 0;
+            //else if((one_hot_bwt_str[1] >> y_pp_) & 1)
+            //    b = 1;
+            //else if((one_hot_bwt_str[2] >> y_pp_) & 1)
+            //    b = 2;
+            //else if((one_hot_bwt_str[3] >> y_pp_) & 1)
+            //    b = 3;
+            //else
+            //    b = 4;
 
-            if (b == 4) {
+            //if (b == 4) {
+            //    return offset;
+            //}
+
+            if (bwt_char == 4) {
                 return offset;
             }
 
-            GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
+            //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
+            GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
+            // Occ[sp, BWT[sp]] , or, the rank of BWT[sp]
 
-            sp = count[b] + occ_sp;
+            // Go to the BW matrix row that start with BWT[sp] of that rank
+            sp = count[bwt_char] + occ_sp;
             
             offset ++;
             // tprof[ALIGN1][tid] ++;
+            // Stop until we reach a SA element row that is not compressed. Use offset to retrieve the request SA entry
             if ((sp & SA_COMPX_MASK) == 0) break;
         }
         // assert((reference_seq_len >> SA_COMPX) - 1 >= (sp >> SA_COMPX));
@@ -1270,25 +1307,32 @@ int64_t FMI_search::call_one_step(int64_t pos, int64_t &sa_entry, int64_t &offse
 
         int64_t occ_id_pp_ = sp >> CP_SHIFT;
         int64_t y_pp_ = CP_BLOCK_SIZE - (sp & CP_MASK) - 1; 
-        uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
+        uint8_t bwt_char = cp_occ[occ_id_pp_].bwt_char;
+        //uint64_t *one_hot_bwt_str = cp_occ[occ_id_pp_].one_hot_bwt_str;
         uint8_t b;
 
-        if((one_hot_bwt_str[0] >> y_pp_) & 1)
-            b = 0;
-        else if((one_hot_bwt_str[1] >> y_pp_) & 1)
-            b = 1;
-        else if((one_hot_bwt_str[2] >> y_pp_) & 1)
-            b = 2;
-        else if((one_hot_bwt_str[3] >> y_pp_) & 1)
-            b = 3;
-        else
-            b = 4;
-        if (b == 4) {
+        //if((one_hot_bwt_str[0] >> y_pp_) & 1)
+        //    b = 0;
+        //else if((one_hot_bwt_str[1] >> y_pp_) & 1)
+        //    b = 1;
+        //else if((one_hot_bwt_str[2] >> y_pp_) & 1)
+        //    b = 2;
+        //else if((one_hot_bwt_str[3] >> y_pp_) & 1)
+        //    b = 3;
+        //else
+        //    b = 4;
+        //if (b == 4) {
+        //    sa_entry = 0;
+        //    return 1;
+        //}
+
+        if (bwt_char == 4) {
             sa_entry = 0;
             return 1;
         }
         
-        GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
+        //GET_OCC(sp, b, occ_id_sp, y_sp, occ_sp, one_hot_bwt_str_c_sp, match_mask_sp);
+        GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
         
         sp = count[b] + occ_sp;
         
