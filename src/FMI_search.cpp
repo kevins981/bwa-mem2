@@ -1044,8 +1044,8 @@ SMEM FMI_search::backwardExt(SMEM smem, uint8_t a)
     {
         int64_t sp = (int64_t)(smem.k);
         int64_t ep = (int64_t)(smem.k) + (int64_t)(smem.s);
-        GET_OCC_UNCOMPRESSED(sp, b, occ_id_sp, occ_sp);
-        GET_OCC_UNCOMPRESSED(ep, b, occ_id_ep, occ_ep);
+        GET_OCC_UNCOMPRESSED(sp, b, occ_sp);
+        GET_OCC_UNCOMPRESSED(ep, b, occ_ep);
         //printf("GET OCC input: sp = %ld, b = %ld, ep = %ld; output: occ_sp = %ld, occ_ep = %ld \n", sp, b, ep, occ_sp, occ_ep);
         k[b] = count[b] + occ_sp;
         s[b] = occ_ep - occ_sp;
@@ -1149,7 +1149,7 @@ int64_t FMI_search::get_sa_entry_compressed(int64_t pos, int tid)
                 return offset;
             }
 
-            GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
+            GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_sp);
             // Occ[sp, BWT[sp]] , or, the rank of BWT[sp]
 
             // Go to the BW matrix row that start with BWT[sp] of that rank
@@ -1228,7 +1228,7 @@ int64_t FMI_search::call_one_step(int64_t pos, int64_t &sa_entry, int64_t &offse
             return 1;
         }
         
-        GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_id_sp, occ_sp);
+        GET_OCC_UNCOMPRESSED(sp, bwt_char, occ_sp);
         
         sp = count[b] + occ_sp;
         

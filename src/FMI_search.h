@@ -125,8 +125,7 @@ typedef struct checkpoint_occ_scalar_uncompressed
 
 // TODO: dont need occ_id_pp anymore
 #define \
-GET_OCC_UNCOMPRESSED(pp, c, occ_id_pp, occ_pp) \
-                int64_t occ_id_pp = pp; \
+GET_OCC_UNCOMPRESSED(pp, c, occ_pp) \
                 int64_t occ_pp = cp_occ[pp].cp_count[c];
                 
 
