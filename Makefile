@@ -82,6 +82,8 @@ else
 myall:multi
 endif
 
+# debug
+#CXXFLAGS+=	-g -O0 -fpermissive $(ARCH_FLAGS) #-Wall ##-xSSE2
 CXXFLAGS+=	-g -O3 -fpermissive $(ARCH_FLAGS) #-Wall ##-xSSE2
 
 .PHONY:all clean depend multi
