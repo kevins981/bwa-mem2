@@ -39,6 +39,7 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 #include <immintrin.h>
 #include <limits.h>
 #include <fstream>
+#include <memkind.h>
 
 #include "read_index_ele.h"
 #include "bwa.h"
@@ -231,6 +232,9 @@ private:
         CP_OCC *cp_occ;
 
         uint64_t *one_hot_mask_array;
+
+        // memkind persistent memory
+        struct memkind *pmem_kind;
 
         int64_t pac_seq_len(const char *fn_pac);
         void pac2nt(const char *fn_pac,

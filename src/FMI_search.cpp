@@ -28,7 +28,7 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 *****************************************************************************************/
 
 #include <stdio.h>
-#include <memkind.h>
+//#include <memkind.h>
 #include "sais.h"
 #include "FMI_search.h"
 #include "memcpy_bwamem.h"
@@ -55,6 +55,7 @@ FMI_search::FMI_search(const char *fname)
     sa_ms_byte = NULL;
     cp_occ = NULL;
     one_hot_mask_array = NULL;
+    pmem_kind = NULL;
 }
 
 FMI_search::~FMI_search()
@@ -65,6 +66,7 @@ FMI_search::~FMI_search()
         _mm_free(sa_ls_word);
     // TODO: not freeing pmem for now.
     if(cp_occ)
+        memkind_free(pmem_kind, cp_occ);
         //_mm_free(cp_occ);
     if(one_hot_mask_array)
         _mm_free(one_hot_mask_array);
@@ -420,7 +422,6 @@ void FMI_search::load_index()
     }
 
     int memkind_err = 0;
-    struct memkind *pmem_kind = NULL;
     memkind_err = memkind_create_pmem(pmem_path, PMEM_MAX_SIZE, &pmem_kind);
     if (memkind_err) {
         char error_message[MEMKIND_ERROR_MESSAGE_SIZE];
@@ -428,16 +429,6 @@ void FMI_search::load_index()
         fprintf(stderr, "%s\n", error_message);
         return 1;
     }
-
-    //char *pmem_test_alloc = NULL;
-    //// test allocation
-    //memkind_err = memkind_posix_memalign(pmem_kind, (void **)&pmem_test_alloc, 64, 32);
-    //if (memkind_err) {
-    //    fprintf(stderr, "Unable to allocate pmem_test_alloc with alignment.\n");
-    //    return 1;
-    //}
-
-    //memkind_free(pmem_kind, pmem_test_alloc);
 
     // This one_hot_mask_array has COMPRESSION_FACTOR numeber of elements, each element of size COMPRESSION_FACTOR.
     // Thus, this original one_hot_mask_array is specifically designed for compression x64. 
