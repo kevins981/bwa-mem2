@@ -34,6 +34,8 @@ endif
 
 EXE=		bwa-mem2
 #CXX=		icpc
+CXX=g++ 
+arch=avx2
 ifeq ($(CXX), icpc)
 	CC= icc
 else ifeq ($(CXX), g++)
@@ -43,7 +45,7 @@ ARCH_FLAGS=	-msse4.1
 MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 $(MEM_FLAGS) 
 INCLUDES=   -Isrc -Iext/safestringlib/include
-LIBS=		-lpthread -lm -lz -L. -lbwa -Lext/safestringlib -lsafestring $(STATIC_GCC) -lmemkind
+LIBS=		-lpthread -lm -lz -L. -lbwa -Lext/safestringlib -lsafestring -lmemkind $(STATIC_GCC) 
 OBJS=		src/fastmap.o src/bwtindex.o src/utils.o src/memcpy_bwamem.o src/kthread.o \
 			src/kstring.o src/ksw.o src/bntseq.o src/bwamem.o src/profiling.o src/bandedSWA.o \
 			src/FMI_search.o src/read_index_ele.o src/bwamem_pair.o src/kswv.o src/bwa.o \
@@ -84,13 +86,18 @@ endif
 
 CXXFLAGS+=	-g -O3 -fpermissive $(ARCH_FLAGS) #-Wall ##-xSSE2
 
-.PHONY:all clean depend multi
+.PHONY:all all_occ_in_pmem clean depend multi
 .SUFFIXES:.cpp .o
 
 .cpp.o:
 	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 all:$(EXE)
+
+# Target specific variable. Only include if target is all_occ_in_pmem
+all_occ_in_pmem: CPPFLAGS+= -DALL_OCC_IN_PMEM 
+#all_occ_in_pmem: LIBS+= -lmemkind
+all_occ_in_pmem:$(EXE)
 
 multi:
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
