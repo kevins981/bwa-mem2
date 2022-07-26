@@ -44,14 +44,15 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 #include "bwa.h"
 
 #define DUMMY_CHAR 6
+#define PMEM_MAX_SIZE (1024L * 1024L * 1024L * 100L) // 100GB
 
 #define assert_not_null(x, size, cur_alloc) \
         if (x == NULL) { fprintf(stderr, "Allocation of %0.2lf GB for " #x " failed.\nCurrent Allocation = %0.2lf GB\n", size * 1.0 /(1024*1024*1024), cur_alloc * 1.0 /(1024*1024*1024)); exit(EXIT_FAILURE); }
 
-#define CP_BLOCK_SIZE 8
-#define CP_FILENAME_SUFFIX ".bwt.2bit.8"
-#define CP_MASK 7
-#define CP_SHIFT 3
+//#define CP_BLOCK_SIZE 8
+//#define CP_FILENAME_SUFFIX ".bwt.2bit.8"
+//#define CP_MASK 7
+//#define CP_SHIFT 3
 
 //#define CP_BLOCK_SIZE 16
 //#define CP_FILENAME_SUFFIX ".bwt.2bit.16"
@@ -63,10 +64,10 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 //#define CP_MASK 31
 //#define CP_SHIFT 5
 
-//#define CP_BLOCK_SIZE 64
-//#define CP_FILENAME_SUFFIX ".bwt.2bit.64"
-//#define CP_MASK 63
-//#define CP_SHIFT 6
+#define CP_BLOCK_SIZE 64
+#define CP_FILENAME_SUFFIX ".bwt.2bit.64"
+#define CP_MASK 63
+#define CP_SHIFT 6
 
 typedef struct checkpoint_occ_scalar
 {

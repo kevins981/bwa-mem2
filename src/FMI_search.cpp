@@ -28,6 +28,7 @@ Authors: Sanchit Misra <sanchit.misra@intel.com>; Vasimuddin Md <vasimuddin.md@i
 *****************************************************************************************/
 
 #include <stdio.h>
+#include <memkind.h>
 #include "sais.h"
 #include "FMI_search.h"
 #include "memcpy_bwamem.h"
@@ -40,6 +41,7 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
 
 FMI_search::FMI_search(const char *fname)
 {
@@ -61,8 +63,9 @@ FMI_search::~FMI_search()
         _mm_free(sa_ms_byte);
     if(sa_ls_word)
         _mm_free(sa_ls_word);
+    // TODO: not freeing pmem for now.
     if(cp_occ)
-        _mm_free(cp_occ);
+        //_mm_free(cp_occ);
     if(one_hot_mask_array)
         _mm_free(one_hot_mask_array);
 }
@@ -406,6 +409,36 @@ int FMI_search::build_index() {
 
 void FMI_search::load_index()
 {
+    char pmem_path[PATH_MAX] = "/pmem0p1/";
+    printf("[DEBUG: memkind] Running memkind test \n");
+    int status = memkind_check_dax_path(pmem_path);
+    if (!status) {
+        fprintf(stdout, "PMEM kind %s is on DAX-enabled file system.\n", pmem_path);
+    } else {
+        fprintf(stdout, "PMEM kind %s is not on DAX-enabled file system.\n",
+                pmem_path);
+    }
+
+    int memkind_err = 0;
+    struct memkind *pmem_kind = NULL;
+    memkind_err = memkind_create_pmem(pmem_path, PMEM_MAX_SIZE, &pmem_kind);
+    if (memkind_err) {
+        char error_message[MEMKIND_ERROR_MESSAGE_SIZE];
+        memkind_error_message(memkind_err, error_message, MEMKIND_ERROR_MESSAGE_SIZE);
+        fprintf(stderr, "%s\n", error_message);
+        return 1;
+    }
+
+    //char *pmem_test_alloc = NULL;
+    //// test allocation
+    //memkind_err = memkind_posix_memalign(pmem_kind, (void **)&pmem_test_alloc, 64, 32);
+    //if (memkind_err) {
+    //    fprintf(stderr, "Unable to allocate pmem_test_alloc with alignment.\n");
+    //    return 1;
+    //}
+
+    //memkind_free(pmem_kind, pmem_test_alloc);
+
     // This one_hot_mask_array has COMPRESSION_FACTOR numeber of elements, each element of size COMPRESSION_FACTOR.
     // Thus, this original one_hot_mask_array is specifically designed for compression x64. 
     // It is used to mask one_hot_bwt_str vectors. See FMI_search.h for more details.
@@ -463,14 +496,17 @@ void FMI_search::load_index()
 
     // count is the data structure that describes the first column of the BW matrix
     err_fread_noeof(&count[0], sizeof(int64_t), 5, cpstream);
-    if ((cp_occ = (CP_OCC *)_mm_malloc(cp_occ_size * sizeof(CP_OCC), 64)) == NULL) {
+    //if ((cp_occ = (CP_OCC *)_mm_malloc(cp_occ_size * sizeof(CP_OCC), 64)) == NULL) {
+    memkind_err = memkind_posix_memalign(pmem_kind, (void **)&cp_occ, 64, cp_occ_size * sizeof(CP_OCC));
+    if (memkind_err) {
         // cp_occ_size = 100542092 or 100M
         // sizeof(CP_OCC) = 64. 
         // _mm_malloc(size, 64) allocates 64-byte alighed memory 
         // so malloc 6.4GB of memory
-        fprintf(stderr, "ERROR! unable to allocated cp_occ memory\n");
+        fprintf(stderr, "ERROR! unable to allocated cp_occ memory in pmem\n");
         exit(EXIT_FAILURE);
-    }
+    } 
+    printf("[DEBUG: memkind] Occurance table allocation on pmem successful.\n");
 
     // read all of 6.4GB OCC table. Seems like this file contains the OCC
     err_fread_noeof(cp_occ, sizeof(CP_OCC), cp_occ_size, cpstream);
