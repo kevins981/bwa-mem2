@@ -619,87 +619,88 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
     w.nthreads = opt->n_threads;
     
 #if NUMA_ENABLED
-    int  deno = 1;
-    int tc = numa_num_task_cpus();
-    int tn = numa_num_task_nodes();
-    int tcc = numa_num_configured_cpus();
-    fprintf(stderr, "num_cpus: %d, num_numas: %d, configured cpus: %d\n", tc, tn, tcc);
-    int ht = HTStatus();
-    if (ht) deno = 2;
-    
-    if (nthreads < tcc/tn/deno) {
-        fprintf(stderr, "Enabling single numa domain...\n\n");
-        // numa_set_preferred(0);
-        // bitmask mask(0);
-        struct bitmask *mask = numa_bitmask_alloc(numa_num_possible_nodes());
-        numa_bitmask_clearall(mask);
-        numa_bitmask_setbit(mask, 0);
-        numa_bind(mask);
-        numa_bitmask_free(mask);
-    }
+    printf("Not doing any NUMA configs. Let numactl handle this \n");
+//    int  deno = 1;
+//    int tc = numa_num_task_cpus();
+//    int tn = numa_num_task_nodes();
+//    int tcc = numa_num_configured_cpus();
+//    fprintf(stderr, "num_cpus: %d, num_numas: %d, configured cpus: %d\n", tc, tn, tcc);
+//    int ht = HTStatus();
+//    if (ht) deno = 2;
+//    
+//    if (nthreads < tcc/tn/deno) {
+//        fprintf(stderr, "Enabling single numa domain...\n\n");
+//        // numa_set_preferred(0);
+//        // bitmask mask(0);
+//        struct bitmask *mask = numa_bitmask_alloc(numa_num_possible_nodes());
+//        numa_bitmask_clearall(mask);
+//        numa_bitmask_setbit(mask, 0);
+//        numa_bind(mask);
+//        numa_bitmask_free(mask);
+//    }
 #endif
-#if AFF && (__linux__)
-    { // Affinity/HT stuff
-        unsigned int cpuid[4];
-        asm volatile
-            ("cpuid" : "=a" (cpuid[0]), "=b" (cpuid[1]), "=c" (cpuid[2]), "=d" (cpuid[3])
-             : "0" (0xB), "2" (1));
-        int num_logical_cpus = cpuid[1] & 0xFFFF;
-
-        asm volatile
-            ("cpuid" : "=a" (cpuid[0]), "=b" (cpuid[1]), "=c" (cpuid[2]), "=d" (cpuid[3])
-             : "0" (0xB), "2" (0));
-        int num_ht = cpuid[1] & 0xFFFF;
-        int num_total_logical_cpus = get_nprocs_conf();
-        int num_sockets = num_total_logical_cpus / num_logical_cpus;
-        fprintf(stderr, "#sockets: %d, #cores/socket: %d, #logical_cpus: %d, #ht/core: %d\n",
-                num_sockets, num_logical_cpus/num_ht, num_total_logical_cpus, num_ht);
-        
-        for (int i=0; i<num_total_logical_cpus; i++) affy[i] = i;
-        int slookup[256] = {-1};
-
-        if (num_ht == 2 && num_sockets == 2)  // generalize it for n sockets
-        {
-            for (int i=0; i<num_total_logical_cpus; i++) {
-                std::ostringstream ss;
-                ss << i;
-                std::string str = "/sys/devices/system/cpu/cpu"+ ss.str();
-                str = str +"/topology/thread_siblings_list";
-                // std::cout << str << std::endl;
-                // std::string str = "cpu.txt";
-                FILE *fp = fopen(str.c_str(), "r");
-                if (fp == NULL) {
-                    fprintf("Error: Cant open the file..\n");
-                    break;
-                }
-                else {
-                    int a, b, v;
-                    char ch[10] = {'\0'};
-                    fgets(ch, 10, fp);
-                    v = sscanf(ch, "%u,%u",&a,&b);
-                    if (v == 1) v = sscanf(ch, "%u-%u",&a,&b);
-                    if (v == 1) {
-                        fprintf(stderr, "Mis-match between HT and threads_sibling_list...%s\n", ch);
-                        fprintf(stderr, "Continuing with default affinity settings..\n");
-                        break;
-                    }
-                    slookup[a] = 1;
-                    slookup[b] = 2;
-                    fclose(fp);
-                }
-            }
-            int a = 0, b = num_total_logical_cpus / num_ht;
-            for (int i=0; i<num_total_logical_cpus; i++) {
-                if (slookup[i] == -1) {
-                    fprintf(stderr, "Unseen cpu topology..\n");
-                    break;
-                }
-                if (slookup[i] == 1) affy[a++] = i;
-                else affy[b++] = i;
-            }
-        }
-    }
-#endif
+//#if AFF && (__linux__)
+//    { // Affinity/HT stuff
+//        unsigned int cpuid[4];
+//        asm volatile
+//            ("cpuid" : "=a" (cpuid[0]), "=b" (cpuid[1]), "=c" (cpuid[2]), "=d" (cpuid[3])
+//             : "0" (0xB), "2" (1));
+//        int num_logical_cpus = cpuid[1] & 0xFFFF;
+//
+//        asm volatile
+//            ("cpuid" : "=a" (cpuid[0]), "=b" (cpuid[1]), "=c" (cpuid[2]), "=d" (cpuid[3])
+//             : "0" (0xB), "2" (0));
+//        int num_ht = cpuid[1] & 0xFFFF;
+//        int num_total_logical_cpus = get_nprocs_conf();
+//        int num_sockets = num_total_logical_cpus / num_logical_cpus;
+//        fprintf(stderr, "#sockets: %d, #cores/socket: %d, #logical_cpus: %d, #ht/core: %d\n",
+//                num_sockets, num_logical_cpus/num_ht, num_total_logical_cpus, num_ht);
+//        
+//        for (int i=0; i<num_total_logical_cpus; i++) affy[i] = i;
+//        int slookup[256] = {-1};
+//
+//        if (num_ht == 2 && num_sockets == 2)  // generalize it for n sockets
+//        {
+//            for (int i=0; i<num_total_logical_cpus; i++) {
+//                std::ostringstream ss;
+//                ss << i;
+//                std::string str = "/sys/devices/system/cpu/cpu"+ ss.str();
+//                str = str +"/topology/thread_siblings_list";
+//                // std::cout << str << std::endl;
+//                // std::string str = "cpu.txt";
+//                FILE *fp = fopen(str.c_str(), "r");
+//                if (fp == NULL) {
+//                    fprintf("Error: Cant open the file..\n");
+//                    break;
+//                }
+//                else {
+//                    int a, b, v;
+//                    char ch[10] = {'\0'};
+//                    fgets(ch, 10, fp);
+//                    v = sscanf(ch, "%u,%u",&a,&b);
+//                    if (v == 1) v = sscanf(ch, "%u-%u",&a,&b);
+//                    if (v == 1) {
+//                        fprintf(stderr, "Mis-match between HT and threads_sibling_list...%s\n", ch);
+//                        fprintf(stderr, "Continuing with default affinity settings..\n");
+//                        break;
+//                    }
+//                    slookup[a] = 1;
+//                    slookup[b] = 2;
+//                    fclose(fp);
+//                }
+//            }
+//            int a = 0, b = num_total_logical_cpus / num_ht;
+//            for (int i=0; i<num_total_logical_cpus; i++) {
+//                if (slookup[i] == -1) {
+//                    fprintf(stderr, "Unseen cpu topology..\n");
+//                    break;
+//                }
+//                if (slookup[i] == 1) affy[a++] = i;
+//                else affy[b++] = i;
+//            }
+//        }
+//    }
+//#endif
     
     int32_t nreads = aux->actual_chunk_size/ READ_LEN + 10;
     

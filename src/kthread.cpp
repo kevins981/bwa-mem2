@@ -90,25 +90,25 @@ void kt_for(void (*func)(void*, long, long, int), void *data, int n)
 	for (i = 0; i < t.n_threads; ++i)
 		t.w[i].t = &t, t.w[i].i = i;
 
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
+	//pthread_attr_t attr;
+	//pthread_attr_init(&attr);
 	
 	// printf("getcpu: %d\n", sched_getcpu());
 	for (i = 0; i < t.n_threads; ++i) {
-#if AFF && (__linux__)
-		cpu_set_t cpus;
-		CPU_ZERO(&cpus);
-		// CPU_SET(i, &cpus);
-		CPU_SET(affy[i], &cpus);
-		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);	
-		pthread_create(&tid[i], &attr, ktf_worker, &t.w[i]);
-#else
+//#if AFF && (__linux__)
+//		cpu_set_t cpus;
+//		CPU_ZERO(&cpus);
+//		// CPU_SET(i, &cpus);
+//		CPU_SET(affy[i], &cpus);
+//		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);	
+//		pthread_create(&tid[i], &attr, ktf_worker, &t.w[i]);
+//#else
 		pthread_create(&tid[i], NULL, ktf_worker, &t.w[i]);
-#endif
+//#endif
 	}
 	for (i = 0; i < t.n_threads; ++i) pthread_join(tid[i], 0);
 
-    pthread_attr_destroy(&attr);
+    //pthread_attr_destroy(&attr);
     free(t.w);
 	free(tid);
 }
